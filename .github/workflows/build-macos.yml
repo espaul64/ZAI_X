@@ -15,17 +15,19 @@ jobs:
         with:
           channel: 'stable'
 
-      # 删除了多余报错的 pod install 步骤，flutter 会自己处理
-      
       - name: Get Flutter dependencies
         run: flutter pub get
 
-      - name: Build macOS (Apple Silicon Only)
-        # 核心：加上 --target-platform=macos-arm64，只打包 arm64，体积减半
-        run: flutter build macos --release --target-platform=macos-arm64
+      - name: Build macOS (Release)
+        run: flutter build macos --release
+
+      # 关键：删掉巨大的调试符号文件，体积直降
+      - name: Clean up dSYM files
+        run: |
+          find build/macos/Build/Products/Release -name "*.dSYM" -exec rm -rf {} +
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-app-arm64
+          name: macos-app
           path: build/macos/Build/Products/Release/
