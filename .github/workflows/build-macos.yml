@@ -15,7 +15,6 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          # 锁定一个稍旧的稳定版本，避开新版 Dart 的 AOT 编译 Bug
           flutter-version: '3.29.0'
           channel: 'stable'
 
@@ -25,13 +24,24 @@ jobs:
       - name: Build macOS (Release)
         run: flutter build macos --release
 
-      # 清理不需要的调试符号文件，能极大减小 .app 的体积
+      # 1. 清理调试符号
       - name: Clean up dSYM files
         run: |
           find build/macos/Build/Products/Release -name "*.dSYM" -exec rm -rf {} +
 
+      # 2. 剔除 Intel (x86_64) 架构，只保留 Apple Silicon (arm64)
+      - name: Strip x86_64 Architecture (Make it Apple Silicon Only)
+        run: |
+          echo "Slimming down .app to arm64 only..."
+          find build/macos/Build/Products/Release -type f | while read -r file; do
+            if file "$file" | grep -q "Mach-O"; then
+              lipo -remove x86_64 "$file" -output "$file" 2>/dev/null || true
+            fi
+          done
+          echo "Done!"
+
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-app
+          name: macos-app-arm64
           path: build/macos/Build/Products/Release/
