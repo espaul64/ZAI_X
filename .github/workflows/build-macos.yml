@@ -13,6 +13,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.35.0'  # 或 '3.29.3' 等已知稳定版本
           channel: 'stable'
 
       - name: Install CocoaPods dependencies
