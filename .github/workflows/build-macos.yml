@@ -9,10 +9,14 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
+          # 锁定一个稍旧的稳定版本，避开新版 Dart 的 AOT 编译 Bug
+          flutter-version: '3.24.0'
           channel: 'stable'
 
       - name: Get Flutter dependencies
@@ -21,7 +25,7 @@ jobs:
       - name: Build macOS (Release)
         run: flutter build macos --release
 
-      # 关键：删掉巨大的调试符号文件，体积直降
+      # 清理不需要的调试符号文件，能极大减小 .app 的体积
       - name: Clean up dSYM files
         run: |
           find build/macos/Build/Products/Release -name "*.dSYM" -exec rm -rf {} +
