@@ -1,0 +1,191 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:easy_refresh/easy_refresh.dart';
+import 'package:flutter_dmzj/app/app_style.dart';
+import 'package:flutter_dmzj/models/db/comic_download_info.dart';
+import 'package:flutter_dmzj/models/db/download_status.dart';
+import 'package:flutter_dmzj/models/db/local_favorite.dart';
+import 'package:flutter_dmzj/models/db/novel_download_info.dart';
+import 'package:flutter_dmzj/services/app_settings_service.dart';
+import 'package:flutter_dmzj/app/log.dart';
+import 'package:flutter_dmzj/app/utils.dart';
+import 'package:flutter_dmzj/models/db/comic_history.dart';
+import 'package:flutter_dmzj/models/db/novel_history.dart';
+import 'package:flutter_dmzj/services/comic_download_service.dart';
+import 'package:flutter_dmzj/services/novel_download_service.dart';
+import 'package:flutter_dmzj/services/db_service.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_dmzj/routes/app_pages.dart';
+import 'package:flutter_dmzj/services/local_storage_service.dart';
+import 'package:flutter_dmzj/services/user_service.dart';
+import 'package:flutter_dmzj/widgets/status/app_loadding_widget.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/get.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:windows_single_instance/windows_single_instance.dart';
+import 'package:window_manager/window_manager.dart';
+
+void main() async {
+  var t = DateTime.now().millisecondsSinceEpoch;
+  WidgetsFlutterBinding.ensureInitialized();
+  _startupLog('ensureInitialized', t);
+
+  t = DateTime.now().millisecondsSinceEpoch;
+  if (Platform.isWindows) {
+    await WindowsSingleInstance.ensureSingleInstance(
+      [],
+      "com.xycz.zmhx",
+      onSecondWindow: (args) {
+        Log.logPrint(args);
+      },
+    );
+  }
+  _startupLog('WindowsSingleInstance', t);
+
+  t = DateTime.now().millisecondsSinceEpoch;
+  await Hive.initFlutter();
+  _startupLog('Hive.initFlutter', t);
+
+  //桌面端窗口大小记忆（已注释回退，不再记忆窗口大小）
+  // if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+  //   await initDesktopWindow();
+  // }
+
+  t = DateTime.now().millisecondsSinceEpoch;
+  //初始化服务
+  await initServices();
+  _startupLog('initServices', t);
+
+  //设置状态栏为透明
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemUiOverlayStyle systemUiOverlayStyle = const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.dark,
+    systemNavigationBarColor: Colors.transparent,
+  );
+  SystemChrome.setSystemUIOverlayStyle(systemUiOverlayStyle);
+
+  t = DateTime.now().millisecondsSinceEpoch;
+  runApp(const DMZJApp());
+  _startupLog('runApp', t);
+}
+
+Future initServices() async {
+  //包信息
+  Utils.packageInfo = await PackageInfo.fromPlatform();
+  //本地存储
+  Log.d("Init LocalStorage Service");
+  await Get.put(LocalStorageService()).init();
+
+  //用户信息
+  Log.d("Init User Service");
+  Get.put(UserService()).init();
+
+  //注册Hive适配器
+  Hive.registerAdapter(ComicHistoryAdapter());
+  Hive.registerAdapter(NovelHistoryAdapter());
+  Hive.registerAdapter(DownloadStatusAdapter());
+  Hive.registerAdapter(ComicDownloadInfoAdapter());
+  Hive.registerAdapter(NovelDownloadInfoAdapter());
+  Hive.registerAdapter(LocalFavoriteAdapter());
+  await Get.put(DBService()).init();
+
+  //初始化设置服务
+  Get.put(AppSettingsService());
+
+  //初始化漫画下载服务
+  Get.put(ComicDownloadService()).init();
+  //初始化小说下载服务
+  Get.put(NovelDownloadService()).init();
+}
+
+class DMZJApp extends StatelessWidget {
+  const DMZJApp({Key? key}) : super(key: key);
+  @override
+  Widget build(BuildContext context) {
+    return GetMaterialApp(
+      title: '动漫之家 X',
+      scrollBehavior: const ERScrollBehavior(),
+      theme: AppStyle.lightTheme,
+      darkTheme: AppStyle.darkTheme,
+      themeMode:
+          ThemeMode.values[Get.find<AppSettingsService>().themeMode.value],
+      initialRoute: AppPages.kIndex,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      locale: const Locale("zh", "CN"),
+      supportedLocales: const [Locale("zh", "CN")],
+      getPages: AppPages.routes,
+      debugShowCheckedModeBanner: false,
+      navigatorObservers: [FlutterSmartDialog.observer],
+      builder: FlutterSmartDialog.init(
+        loadingBuilder: ((msg) => const AppLoaddingWidget()),
+        //字体大小不跟随系统变化
+        builder: (context, child) => Obx(
+          () => MediaQuery(
+            data: AppSettingsService.instance.useSystemFontSize.value
+                ? MediaQuery.of(context)
+                : MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(1.0)),
+            child: child!,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+void _startupLog(String name, int startMs) {
+  debugPrint(
+      '[STARTUP-DEBUG] $name: ${DateTime.now().millisecondsSinceEpoch - startMs}ms');
+}
+
+Future<void> initDesktopWindow() async {
+  var t = DateTime.now().millisecondsSinceEpoch;
+  await windowManager.ensureInitialized();
+  _startupLog('windowManager.ensureInitialized', t);
+
+  t = DateTime.now().millisecondsSinceEpoch;
+  final box = await Hive.openBox('window_settings');
+  _startupLog('Hive.openBox(window_settings)', t);
+
+  final width = (box.get('windowWidth', defaultValue: 1280) as num).toDouble();
+  final height = (box.get('windowHeight', defaultValue: 720) as num).toDouble();
+
+  final windowOptions = WindowOptions(
+    size: Size(width, height),
+    center: true,
+  );
+
+  final tWait = DateTime.now().millisecondsSinceEpoch;
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    _startupLog('waitUntilReadyToShow', tWait);
+    await windowManager.show();
+    await windowManager.focus();
+  });
+
+  windowManager.addListener(_WindowSizeListener());
+}
+
+class _WindowSizeListener extends WindowListener {
+  @override
+  void onWindowResized() async {
+    final size = await windowManager.getSize();
+    final box = await Hive.openBox('window_settings');
+    await box.put('windowWidth', size.width);
+    await box.put('windowHeight', size.height);
+  }
+
+  @override
+  void onWindowClose() async {
+    await Hive.close();
+    await windowManager.destroy();
+  }
+}

@@ -1,0 +1,7 @@
+{
+    "version": "1.0.3-test",
+    "version_num": 10003,
+    "version_desc": "1. 修复漫画下载失败",
+    "prerelease":true,
+    "download_url": "https://github.com/xiaoyaocz/flutter_dmzj/releases"
+}

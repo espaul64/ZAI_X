@@ -1,0 +1,7 @@
+display_name: ZAI-X
+publisher_display_name: xiaoyaocz
+identity_name: com.xycz.zmhx
+logo_path: assets/images/logo.png
+capabilities: internetClient
+languages: zh-cn
+install_certificate: "false"
